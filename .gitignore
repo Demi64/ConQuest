@@ -4,3 +4,4 @@ node_modules/
 public/assets/
 *.log
 .DS_Store
+.owner-password.txt

@@ -1,11 +1,15 @@
 // 動作確認用：ローカルで動かしたサーバー（npm run dev）に対して、画面のAPIとMCPをひと通り呼ぶ。
-// 使い方：  node scripts/smoke.mjs [http://localhost:8787] [パスワード]
+// 使い方：  node scripts/smoke.mjs [http://localhost:8787] [パスワード] [--readonly]
+// --readonly を付けると、ログインと MCP の接続・読み出しだけを確かめる（データを書かない。本番の確認用）。
+// パスワードは環境変数 CQ_PASSWORD でも渡せる。
 import { execSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
-const BASE = process.argv[2] ?? "http://localhost:8787";
-const PASSWORD = process.argv[3] ?? "devpass";
+const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const READONLY = process.argv.includes("--readonly");
+const BASE = argv[0] ?? "http://localhost:8787";
+const PASSWORD = process.env.CQ_PASSWORD ?? argv[1] ?? "devpass";
 let cookie = "";
 let failures = 0;
 
@@ -94,6 +98,19 @@ async function main() {
   console.log("== 画面のログイン");
   check("未ログインは401", (await web("/api/home")).status === 401);
   check("ログイン", (await web("/api/login", { password: PASSWORD })).status === 200);
+
+  if (READONLY) {
+    const home = await web("/api/home");
+    check("ホームが読める", home.status === 200 && !!home.body?.today, home);
+    const mcp = await connectMcp();
+    const tools = (await mcp.listTools()).tools.map((t) => t.name);
+    check("操作は16個", tools.length === 16, tools);
+    const r = await mcp.callTool({ name: "get_overview", arguments: {} });
+    check("概要が読める", !r.isError && JSON.parse(r.content[0].text).today === home.body.today, r);
+    await mcp.close();
+    console.log(failures ? `\n${failures} 件失敗` : "\n全て成功");
+    process.exit(failures ? 1 : 0);
+  }
 
   const input = await op("add_input", { body: "来週の金曜までに見積書を作って送る。あと毎日ゴミ出し" });
   check("入力を保存", !!input.body?.input_id, input);
