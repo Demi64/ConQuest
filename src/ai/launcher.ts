@@ -37,7 +37,7 @@ class RoutineLauncher implements AiLauncher {
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ text: "ComQuest: there are unprocessed inputs or rejected proposals." }),
+      body: JSON.stringify({ text: "ConQuest: there are unprocessed inputs or rejected proposals." }),
     });
     if (res.ok) return { ok: true };
     const body = (await res.text()).slice(0, 300);

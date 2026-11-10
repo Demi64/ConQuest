@@ -1,4 +1,4 @@
--- ComQuest MVP のデータベース定義（docs/design.md 参照）
+-- ConQuest MVP のデータベース定義（docs/design.md 参照）
 -- 時刻は ISO 8601（UTC）、日付は YYYY-MM-DD（設定のタイムゾーン）で持つ。IDは全てUUID。
 
 CREATE TABLE settings (

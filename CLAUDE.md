@@ -1,4 +1,4 @@
-# ComQuest
+# ConQuest
 
 MMOのクエストログの構造をUXとして採り入れた、LLM前提のタスク管理ツール。
 

@@ -3,7 +3,7 @@
 const q = (s: string) => `「${s}」`;
 
 export const M = {
-  appName: "ComQuest",
+  appName: "ConQuest",
 
   questStatus: { board: "Quest Board", active: "受注中", on_hold: "保留", completed: "完了", discarded: "破棄" },
   questKind: { normal: "通常", daily: "デイリー", event: "イベント" },
@@ -123,7 +123,7 @@ export const M = {
     aiNotConfigured: "AIの自動起動は未設定",
     aiError: "AIの起動に失敗",
 
-    login: { title: "ComQuest", password: "パスワード", submit: "ログイン" },
+    login: { title: "ConQuest", password: "パスワード", submit: "ログイン" },
 
     input: {
       title: "入力",
@@ -262,7 +262,7 @@ export const M = {
     },
     authorize: {
       title: "接続の許可",
-      lead: (client: string) => `${q(client)} が ComQuest のデータを読み書きすることを許可しますか？`,
+      lead: (client: string) => `${q(client)} が ConQuest のデータを読み書きすることを許可しますか？`,
       redirect: "接続先",
       approve: "許可する",
       deny: "許可しない",

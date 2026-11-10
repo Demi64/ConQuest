@@ -1,6 +1,6 @@
 # 使い始めるまでの手順
 
-ComQuest を自分の Cloudflare アカウントに置いて使い始めるまでの手順。上から順に進める。
+ConQuest を自分の Cloudflare アカウントに置いて使い始めるまでの手順。上から順に進める。
 1〜3 はコマンドを打つ作業（Claude Code に頼める）、4〜7 はブラウザでの作業。
 
 必要なもの：Node.js 22 以上、Cloudflare のアカウント、Claude の有料プラン。
@@ -24,7 +24,7 @@ npx wrangler d1 migrations apply DB --remote
 ```
 
 - 初回はデータベースなどの置き場所が自動で作られる。
-- 終わると `https://comquest.<自分のサブドメイン>.workers.dev` というアドレスが表示される。これが ComQuest のアドレス。
+- 終わると `https://comquest.<自分のサブドメイン>.workers.dev` というアドレスが表示される。これが ConQuest のアドレス。
 
 ## 3. パスワードなどを登録する
 
@@ -38,8 +38,8 @@ npx wrangler secret put ENCRYPTION_KEY     # 適当な長い文字列（例：op
 ## 4. claude.ai にコネクタとして追加する
 
 1. claude.ai の 設定 → コネクタ →「カスタムコネクタを追加」
-2. 名前：`ComQuest`、URL：`https://comquest.<自分のサブドメイン>.workers.dev/mcp`
-3. 「接続」を押すと ComQuest の許可画面が開く。パスワードを入れて「許可する」。
+2. 名前：`ConQuest`、URL：`https://comquest.<自分のサブドメイン>.workers.dev/mcp`
+3. 「接続」を押すと ConQuest の許可画面が開く。パスワードを入れて「許可する」。
 
 これで Claude のチャット（スマホの音声入力も）から「〜をやることに追加して」「今日やること教えて」と話しかけられる。
 
@@ -51,7 +51,7 @@ npx wrangler secret put ENCRYPTION_KEY     # 適当な長い文字列（例：op
 2. プロンプトに `prompts/routine.md` の「プロンプト本文」より下を全部貼る。
 3. トリガーで **API** を選ぶ。作成すると **トークンが1度だけ表示される**のでコピーする。あわせて **Fire URL** もコピーする。
 4. 同じタスクにトリガーをもう1つ足し、**スケジュール**（毎日。おすすめは朝）を選ぶ。これが1日1回の棚卸しになる。
-5. コネクタは **ComQuest**（と、使うなら Googleカレンダー）だけ残し、他は外す。リポジトリは選ばなくてよい。
+5. コネクタは **ConQuest**（と、使うなら Googleカレンダー）だけ残し、他は外す。リポジトリは選ばなくてよい。
 6. コピーした2つをサーバーに登録する。
 
 ```
@@ -80,9 +80,9 @@ npx wrangler secret put GOOGLE_CLIENT_ID
 npx wrangler secret put GOOGLE_CLIENT_SECRET
 ```
 
-6. ComQuest の 設定 → Googleカレンダー →「接続する」。Google の画面で許可する。
+6. ConQuest の 設定 → Googleカレンダー →「接続する」。Google の画面で許可する。
 
-取り込むのは、Googleカレンダーの画面でチェックを入れて表示しているカレンダー。15分ごとに読み直す。ComQuest から予定を書き換えることはない。
+取り込むのは、Googleカレンダーの画面でチェックを入れて表示しているカレンダー。15分ごとに読み直す。ConQuest から予定を書き換えることはない。
 
 ## 7. 更新するとき
 

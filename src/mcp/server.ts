@@ -67,7 +67,7 @@ async function execute(env: Env, name: McpOp, args: unknown): Promise<unknown> {
 
 function createServer(): McpServer {
   const env = globalEnv as unknown as Env;
-  const server = new McpServer({ name: "comquest", version: "0.1.0" }, { instructions: MCP_INSTRUCTIONS });
+  const server = new McpServer({ name: "conquest", version: "0.1.0" }, { instructions: MCP_INSTRUCTIONS });
   for (const name of MCP_OPS) {
     server.registerTool(
       name,
