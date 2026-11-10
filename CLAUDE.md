@@ -5,6 +5,12 @@ MMOのクエストログの構造をUXとして採り入れた、LLM前提のタ
 ## 仕様
 - まず `docs/mvp.md` を読む。最初に実装する範囲と構成はここが正。
 - 詳細（用語・データモデル・MCP操作・ライフサイクル）は `docs/spec-draft.md`。MVP仕様と食い違う場合はMVP仕様を優先する。
+- 実装の構成と、実装時に決めた技術的なことは `docs/design.md`。デプロイと初期設定の手順は `docs/setup.md`。
+
+## 開発
+- Node.js 22 以上が必要（`node -v` が古いときは `export PATH=/opt/homebrew/opt/node@22/bin:$PATH`）。
+- `npm run dev` で手元のサーバー、`node scripts/smoke.mjs` で通しの動作確認、`npm run typecheck` で型の確認。
+- 書き込みは必ず `src/core/store.ts` の `Tx` を通す（履歴に残すため）。画面の文言は `src/shared/messages.ts` に足す。
 
 ## 進め方
 - 技術的な設計判断（API・データ構造・ライブラリ選定・内部の仕組み）は自分で決め、決めたことは `docs/` に追記して残す。

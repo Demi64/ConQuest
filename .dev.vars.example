@@ -1,0 +1,8 @@
+# 手元で動かすとき（npm run dev）用の設定。このファイルを .dev.vars という名前でコピーして使う。
+# 本番の値は wrangler secret put で登録する（docs/setup.md）。本物の値をこのファイルに書かないこと。
+OWNER_PASSWORD=devpass
+ENCRYPTION_KEY=devkey
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# ROUTINE_FIRE_URL=
+# ROUTINE_TOKEN=
