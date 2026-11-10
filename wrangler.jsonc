@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "comquest",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "build": { "command": "node scripts/build-web.mjs" },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/mcp", "/authorize", "/oauth/*", "/.well-known/*", "/google/*"]
+  },
+  "d1_databases": [{ "binding": "DB", "database_name": "comquest", "migrations_dir": "migrations" }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+  "durable_objects": { "bindings": [{ "name": "AI_QUEUE", "class_name": "AiQueue" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AiQueue"] }],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true }
+}
