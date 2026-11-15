@@ -71,6 +71,7 @@ export async function run(action: () => Promise<unknown>, done?: () => void | Pr
   try {
     await action();
     await done?.();
+    window.dispatchEvent(new Event("cq:changed"));
     return true;
   } catch (e) {
     toastError(e);
@@ -111,9 +112,13 @@ export function useData<T>(fetcher: () => Promise<T>, deps: unknown[], intervalM
     void reload();
     const onVisible = () => document.visibilityState === "visible" && void reload();
     document.addEventListener("visibilitychange", onVisible);
+    // 別の場所（重なって開いているウィンドウなど）で書き込みがあったら読み直す
+    const onChanged = () => void reload();
+    window.addEventListener("cq:changed", onChanged);
     const timer = intervalMs ? setInterval(() => document.visibilityState === "visible" && void reload(), intervalMs) : undefined;
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("cq:changed", onChanged);
       if (timer) clearInterval(timer);
     };
   }, [reload, intervalMs]);

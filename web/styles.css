@@ -1,40 +1,52 @@
 /* ConQuest の画面の見た目。スマホを基準に作り、幅が広いとき（PC）は左ナビ＋2列にする。 */
 
 :root {
-  --bg: #f6f4ef;
-  --surface: #ffffff;
-  --line: #e2ded4;
-  --text: #1d2023;
-  --muted: #6b6f76;
-  --accent: #1f5c57;
-  --accent-text: #ffffff;
-  --accent-soft: #e3efed;
+  /* 地の色・紙の色・真鍮色の枠・濃い帯（ウィンドウの上端とナビ） */
+  --bg: #e7e1d3;
+  --surface: #f8f3e7;
+  --line: #d9cfb9;
+  --text: #2a241b;
+  --muted: #74695a;
+  --accent: #7a5a1e;
+  --accent-text: #fff8e8;
+  --accent-soft: #ecdfc2;
+  --frame: #a8894a;
+  --bar-bg: linear-gradient(#3b3125, #2a2219);
+  --bar-text: #f1e4c3;
+  --bar-muted: #b3a585;
+  --bar-accent: #e7c877;
   --report: #a35a00;
-  --report-soft: #fbefd9;
+  --report-soft: #fbe9c8;
   --danger: #a3362b;
-  --do: #1f5c57;
-  --dont: #6b6f76;
+  --do: #2f6b4f;
+  --dont: #74695a;
   --stalled: #a35a00;
-  --radius: 10px;
+  --radius: 6px;
   --nav-h: 58px;
+  --serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16181b;
-    --surface: #1f2226;
-    --line: #30343a;
-    --text: #e8e6e1;
-    --muted: #9a9ea6;
-    --accent: #6fc2b8;
-    --accent-text: #10201e;
-    --accent-soft: #223532;
+    --bg: #131519;
+    --surface: #1e2127;
+    --line: #363b45;
+    --text: #e9e4d6;
+    --muted: #9c9788;
+    --accent: #d4b36a;
+    --accent-text: #1d1708;
+    --accent-soft: #332c1a;
+    --frame: #8f7740;
+    --bar-bg: linear-gradient(#2a2e37, #1b1e24);
+    --bar-text: #eadbb0;
+    --bar-muted: #9c9788;
+    --bar-accent: #e7c877;
     --report: #f0b458;
     --report-soft: #3a2e18;
     --danger: #ef8a7e;
-    --do: #6fc2b8;
-    --dont: #9a9ea6;
+    --do: #7fc7a3;
+    --dont: #9c9788;
     --stalled: #f0b458;
   }
 }
@@ -97,8 +109,8 @@ button,
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 14px;
+  border-radius: 999px;
+  padding: 8px 16px;
   min-height: 40px;
   cursor: pointer;
   text-decoration: none;
@@ -471,55 +483,6 @@ label > textarea {
 }
 
 /* ---------- クエスト ---------- */
-
-.quest-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.quests .quest-card:last-child {
-  border-bottom: none;
-}
-
-.page > .quests {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 2px 14px;
-}
-
-.quest-card-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  text-decoration: none;
-}
-
-.quest-title {
-  font-weight: 600;
-}
-
-.objective {
-  font-size: 14px;
-  padding-left: 12px;
-  border-left: 2px solid var(--accent);
-  margin: 3px 0;
-}
-
-.quest-card.awaiting .objective,
-.awaiting-label {
-  border-left-color: var(--report);
-  color: var(--report);
-  font-weight: 600;
-}
-
-.quest-card .complete {
-  flex: none;
-}
 
 .badge,
 .chip {
@@ -973,5 +936,495 @@ dialog::backdrop {
   .toasts {
     bottom: 24px;
     left: 190px;
+  }
+}
+
+/* ================= MMOのクエストログ風の見た目（HUD・ウィンドウ・一覧・クエストの内容） ================= */
+
+.glyph {
+  color: var(--accent);
+  flex: none;
+}
+
+/* ---------- ナビ（濃い帯） ---------- */
+
+.nav {
+  background: var(--bar-bg);
+  border-color: var(--frame);
+}
+
+.brand {
+  font-family: var(--serif);
+  color: var(--bar-text);
+  letter-spacing: 0.06em;
+}
+
+.nav-item {
+  color: var(--bar-muted);
+}
+
+.nav-item.on {
+  color: var(--bar-accent);
+}
+
+/* ---------- ウィンドウ ---------- */
+
+.window-layer {
+  position: fixed;
+  inset: 0 0 calc(var(--nav-h) + env(safe-area-inset-bottom)) 0;
+  z-index: 8;
+  background: rgb(0 0 0 / 0.5);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.window {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  background: var(--surface);
+  padding-top: env(safe-area-inset-top);
+}
+
+.window-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px 6px 14px;
+  background: var(--bar-bg);
+  color: var(--bar-text);
+  border-bottom: 1px solid var(--frame);
+  flex: none;
+}
+
+.window-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.window-title .glyph {
+  color: var(--bar-accent);
+  font-size: 12px;
+}
+
+.window-close {
+  border: none;
+  background: none;
+  color: var(--bar-text);
+  min-height: 36px;
+  width: 36px;
+  padding: 0;
+  font-size: 15px;
+}
+
+.window-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  overscroll-behavior: contain;
+}
+
+.window.wide .window-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.window .page {
+  max-width: none;
+}
+
+.window .page > h1 {
+  display: none;
+}
+
+/* ---------- 一覧と内容の2枚 ---------- */
+
+.panes {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pane-list,
+.pane-detail {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* 幅が狭いときは1枚ずつ：クエストを開いている間は一覧を隠す */
+.panes.has-detail .pane-list,
+.panes:not(.has-detail) .pane-detail {
+  display: none;
+}
+
+.pane-empty {
+  padding: 48px 20px;
+}
+
+.quest-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.quest-list .filters {
+  padding: 10px 12px 8px;
+  margin: 0;
+  flex: none;
+}
+
+.quest-list-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 8px;
+}
+
+.quest-list-foot {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.quest-list-foot .num {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tab {
+  flex: 1;
+  min-height: 34px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  background: transparent;
+}
+
+.tab.on {
+  background: var(--bar-bg);
+  color: var(--bar-text);
+  border-color: var(--frame);
+  font-weight: 600;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 10px 2px;
+  padding: 2px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.group-head .glyph {
+  font-size: 11px;
+}
+
+.group-count {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.quest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 16px;
+}
+
+.quest-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 0;
+  text-decoration: none;
+}
+
+.quest-row-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.quest-row-side {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.quest-row-side.soon {
+  color: var(--report);
+}
+
+.quest-row.on {
+  background: linear-gradient(90deg, var(--accent-soft), transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.quest-row.awaiting .glyph,
+.quest-row.kind-event .glyph,
+.track.awaiting .glyph,
+.track.kind-event .glyph {
+  color: var(--report);
+}
+
+.track-toggle {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+/* ---------- クエストの内容 ---------- */
+
+.quest-detail {
+  padding: 14px 16px 20px;
+}
+
+.quest-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--frame);
+}
+
+.quest-glyph {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--frame);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--frame);
+  background: var(--bar-bg);
+  color: var(--bar-accent);
+  font-size: 17px;
+  margin: 3px;
+}
+
+.quest-head-main {
+  min-width: 0;
+}
+
+.quest-head h1 {
+  font-family: var(--serif);
+  font-size: 19px;
+  margin: 0 0 4px;
+}
+
+.quest-head .badges {
+  margin: 0;
+}
+
+.quest-detail .part {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 18px;
+}
+
+.quest-detail .part-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--serif);
+  font-size: 15px;
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+
+.sec-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 12px/1 system-ui, sans-serif;
+  flex: none;
+}
+
+.quest-detail .part > :not(.part-head) {
+  margin-left: 28px;
+}
+
+.quest-detail .condition {
+  background: none;
+  border: none;
+  padding: 0;
+  white-space: pre-wrap;
+}
+
+.task.current {
+  background: var(--accent-soft);
+  border-radius: 6px;
+  border-bottom-color: transparent;
+  margin: 0 -8px 2px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.current-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.quest-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--frame);
+}
+
+.back.narrow-only {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* ---------- トラッカー（HUD） ---------- */
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.tracker .track:last-child {
+  border-bottom: none;
+}
+
+.track-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+}
+
+.track-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.track-obj,
+.track-main .meta {
+  padding-left: 22px;
+}
+
+.track-obj {
+  font-size: 13.5px;
+}
+
+.track-obj::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+
+.track-progress {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.track.awaiting .track-title,
+.track.awaiting .track-obj {
+  color: var(--report);
+}
+
+@media (min-width: 900px) {
+  .nav-item.on {
+    background: rgb(255 255 255 / 0.08);
+  }
+
+  .window-layer {
+    inset: 0 0 0 190px;
+    align-items: center;
+    padding: 24px;
+  }
+
+  .window {
+    width: min(100%, 600px);
+    max-height: 100%;
+    padding-top: 0;
+    border: 1px solid var(--frame);
+    border-radius: 6px;
+    /* 二重線の枠 */
+    box-shadow: 0 0 0 3px var(--surface), 0 0 0 4px var(--frame), 0 20px 60px rgb(0 0 0 / 0.5);
+    overflow: hidden;
+  }
+
+  .window.wide {
+    width: min(100%, 1060px);
+    height: min(100%, 780px);
+  }
+
+  .panes {
+    grid-template-columns: 360px minmax(0, 1fr);
+  }
+
+  .panes.has-detail .pane-list,
+  .panes:not(.has-detail) .pane-detail {
+    display: block;
+  }
+
+  .pane-list {
+    border-right: 1px solid var(--frame);
+    overflow: hidden;
+  }
+
+  .quest-detail {
+    padding: 18px 24px 24px;
+  }
+
+  .narrow-only,
+  .back.narrow-only {
+    display: none;
   }
 }

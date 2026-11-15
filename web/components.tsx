@@ -8,11 +8,24 @@ import { Link, formatDate, formatDue, isDueSoon, run } from "./lib";
 
 const U = M.ui;
 
-export function Section(props: { title: string; count?: number; action?: ComponentChildren; children: ComponentChildren; class?: string }) {
+export function Section(props: {
+  title: string;
+  count?: number;
+  action?: ComponentChildren;
+  children: ComponentChildren;
+  class?: string;
+  /** 見出しの前に出す丸い印（クエストの内容の区切り用） */
+  icon?: string;
+}) {
   return (
     <section class={`part ${props.class ?? ""}`}>
       <header class="part-head">
         <h2>
+          {props.icon && (
+            <span class="sec-icon" aria-hidden="true">
+              {props.icon}
+            </span>
+          )}
           {props.title}
           {props.count ? <span class="count">{props.count}</span> : null}
         </h2>
@@ -21,6 +34,45 @@ export function Section(props: { title: string; count?: number; action?: Compone
       {props.children}
     </section>
   );
+}
+
+/** 画面の上に重ねて開くウィンドウ（ログ・クエストの内容・履歴・設定）。Esc・✕・外側のクリックで閉じる */
+export function Window(props: { title: string; wide?: boolean; onClose: () => void; children: ComponentChildren }) {
+  const close = useRef(props.onClose);
+  close.current = props.onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("dialog[open]")) close.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <div class="window-layer" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
+      <section class={`window ${props.wide ? "wide" : ""}`} role="dialog" aria-label={props.title}>
+        <header class="window-bar">
+          <span class="window-title">
+            <span class="glyph" aria-hidden="true">
+              ◆
+            </span>
+            {props.title}
+          </span>
+          <button class="window-close" aria-label={U.close} onClick={props.onClose}>
+            ✕
+          </button>
+        </header>
+        <div class="window-body">{props.children}</div>
+      </section>
+    </div>
+  );
+}
+
+/** クエストの種類・状態を表す印 */
+export function questGlyph(q: QuestSummary): string {
+  if (q.awaiting_report) return "✔";
+  if (q.kind === "event") return "✦";
+  if (q.kind === "daily") return "◇";
+  return "◆";
 }
 
 /** 確認や理由の入力に使う小さなダイアログ */
@@ -105,7 +157,15 @@ export function QuickAdd(props: { placeholder: string; onAdd: (text: string) => 
   );
 }
 
-export function TaskItem(props: { task: TaskView; today: string; onChange: () => void; questTitle?: string; readOnly?: boolean }) {
+export function TaskItem(props: {
+  task: TaskView;
+  today: string;
+  onChange: () => void;
+  questTitle?: string;
+  readOnly?: boolean;
+  /** 現在の目的（未完了の先頭）として目立たせる */
+  current?: boolean;
+}) {
   const { task: t } = props;
   const [open, setOpen] = useState(false);
   const set = (status: TaskView["status"]) => run(() => op("set_task_status", { task_id: t.id, status }), props.onChange);
@@ -116,7 +176,7 @@ export function TaskItem(props: { task: TaskView; today: string; onChange: () =>
     t.carryover_count > 0 ? U.daily.carried(t.carryover_count) : null,
   ].filter(Boolean);
   return (
-    <li class={`task ${t.status}`}>
+    <li class={`task ${t.status} ${props.current ? "current" : ""}`}>
       <button
         class="check"
         role="checkbox"
@@ -128,6 +188,7 @@ export function TaskItem(props: { task: TaskView; today: string; onChange: () =>
         {t.status === "done" ? "✓" : t.status === "dropped" ? "–" : ""}
       </button>
       <div class="task-main" onClick={() => !props.readOnly && setOpen(!open)}>
+        {props.current && <span class="current-label">{U.quest.currentObjective}</span>}
         <span class="task-title">{t.title}</span>
         {meta.length > 0 && (
           <span class={`meta ${t.status === "open" && isDueSoon(t.due, props.today) ? "soon" : ""}`}>{meta.join("・")}</span>
@@ -218,38 +279,72 @@ export function EventItem(props: { event: EventView; today: string; action?: Com
   );
 }
 
-export function QuestCard(props: { quest: QuestSummary; today: string; onChange: () => void; action?: ComponentChildren }) {
+/** トラッカーの1件：クエスト名と、その下に現在の目的 */
+export function TrackerItem(props: { quest: QuestSummary; today: string; onChange: () => void }) {
   const { quest: q } = props;
   const complete = () => run(() => op("complete_quest", { quest_id: q.id }), props.onChange);
-  const meta = [
-    q.due ? `${U.quest.due} ${formatDue(q.due, props.today)}` : null,
-    q.status === "on_hold" && q.resume_on ? `${U.quest.resumeOn} ${formatDate(q.resume_on, props.today)}` : null,
-    q.requester,
-    q.location,
-  ].filter(Boolean);
+  const soon = q.status === "active" && isDueSoon(q.due, props.today);
   return (
-    <li class={`quest-card ${q.awaiting_report ? "awaiting" : ""}`}>
-      <Link href={`/quest/${q.id}`} class="quest-card-main">
-        <span class="quest-title">
-          {q.kind === "event" && <span class="badge kind-event">{M.questKind.event}</span>}
+    <li class={`track ${q.awaiting_report ? "awaiting" : ""} kind-${q.kind}`}>
+      <Link href={`/quest/${q.id}`} class="track-main">
+        <span class="track-title">
+          <span class="glyph" aria-hidden="true">
+            {questGlyph(q)}
+          </span>
           {q.title}
         </span>
-        {q.awaiting_report ? (
-          <span class="objective awaiting-label">{U.tracker.awaiting}</span>
-        ) : q.status === "active" || q.status === "on_hold" ? (
-          <span class="objective">{q.current_objective?.title ?? U.tracker.noObjective}</span>
-        ) : null}
-        <span class={`meta ${q.status === "active" && isDueSoon(q.due, props.today) ? "soon" : ""}`}>
-          {[...(q.progress.total ? [U.quest.progress(q.progress.done, q.progress.total)] : []), ...meta].join("・")}
-          {q.pending_proposals > 0 && <span class="chip">{U.proposals.badge(q.pending_proposals)}</span>}
+        <span class="track-obj">
+          {q.awaiting_report ? U.tracker.awaiting : (q.current_objective?.title ?? U.tracker.noObjective)}
+          {q.progress.total > 0 && !q.awaiting_report && <span class="track-progress">{U.quest.progress(q.progress.done, q.progress.total)}</span>}
         </span>
+        {(q.due || q.pending_proposals > 0) && (
+          <span class={`meta ${soon ? "soon" : ""}`}>
+            {q.due && `${U.quest.due} ${formatDue(q.due, props.today)}`}
+            {q.pending_proposals > 0 && <span class="chip">{U.proposals.badge(q.pending_proposals)}</span>}
+          </span>
+        )}
       </Link>
-      {q.awaiting_report ? (
-        <button class="primary complete" onClick={complete}>
+      {q.awaiting_report && (
+        <button class="primary small" onClick={complete}>
           {U.tracker.complete}
         </button>
-      ) : (
-        props.action
+      )}
+    </li>
+  );
+}
+
+/** 一覧の1行：印・クエスト名・期限。受注中は右端のチェックでトラッカーに出す／出さないを切り替える */
+export function QuestRow(props: { quest: QuestSummary; today: string; selected: boolean; onChange: () => void }) {
+  const { quest: q } = props;
+  const soon = q.status === "active" && isDueSoon(q.due, props.today);
+  const side = q.due
+    ? formatDue(q.due, props.today)
+    : q.status === "on_hold" && q.resume_on
+      ? `${U.quest.resumeOn} ${formatDate(q.resume_on, props.today)}`
+      : q.progress.total > 0
+        ? U.quest.progress(q.progress.done, q.progress.total)
+        : "";
+  return (
+    <li class={`quest-row ${props.selected ? "on" : ""} ${q.awaiting_report ? "awaiting" : ""} kind-${q.kind}`}>
+      <Link href={`/quest/${q.id}`} class="quest-row-main">
+        <span class="glyph" aria-hidden="true">
+          {questGlyph(q)}
+        </span>
+        <span class="quest-row-title">
+          {q.title}
+          {q.pending_proposals > 0 && <span class="chip">{U.proposals.badge(q.pending_proposals)}</span>}
+        </span>
+        <span class={`quest-row-side ${soon ? "soon" : ""}`}>{side}</span>
+      </Link>
+      {q.status === "active" && q.kind !== "daily" && (
+        <input
+          type="checkbox"
+          class="track-toggle"
+          checked={q.tracked}
+          title={U.quest.tracked}
+          aria-label={U.quest.tracked}
+          onChange={(e) => run(() => op("update_quest", { quest_id: q.id, tracked: e.currentTarget.checked }), props.onChange)}
+        />
       )}
     </li>
   );

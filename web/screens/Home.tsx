@@ -3,7 +3,7 @@ import { useState } from "preact/hooks";
 import { M } from "../../src/shared/messages";
 import type { HomeView } from "../../src/shared/types";
 import { op, post } from "../api";
-import { EventItem, ProposalCard, QuestCard, QuickAdd, Section, TaskItem } from "../components";
+import { EventItem, ProposalCard, QuickAdd, Section, TaskItem, TrackerItem } from "../components";
 import { Link, Loading, run, toast, useData } from "../lib";
 import { get } from "../api";
 
@@ -136,11 +136,11 @@ export function Home() {
             </Section>
           )}
           {parts.tracker && (
-            <Section title={U.tracker.title} count={home.tracker.length}>
+            <Section title={U.tracker.title} count={home.tracker.length} class="tracker-part">
               {home.tracker.length === 0 && <p class="empty muted">{U.tracker.empty}</p>}
-              <ul class="quests">
+              <ul class="tracker">
                 {home.tracker.map((q) => (
-                  <QuestCard key={q.id} quest={q} today={home.today} onChange={reload} />
+                  <TrackerItem key={q.id} quest={q} today={home.today} onChange={reload} />
                 ))}
               </ul>
             </Section>

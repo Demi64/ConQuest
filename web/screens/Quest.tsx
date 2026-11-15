@@ -1,9 +1,9 @@
-// クエスト詳細：タスク、ジャーナル、紐づく予定、そのクエストへの提案、状態の変更
+// クエストの内容（ウィンドウの右側）：完了条件、目的（タスク）、情報、紐づく予定、ジャーナル、提案、状態の変更
 import { useState } from "preact/hooks";
 import { M } from "../../src/shared/messages";
 import type { EventView, QuestDetail } from "../../src/shared/types";
 import { get, op } from "../api";
-import { Dialog, EventItem, ProposalCard, QuickAdd, ReasonDialog, Section, TaskItem } from "../components";
+import { Dialog, EventItem, ProposalCard, QuickAdd, ReasonDialog, Section, TaskItem, questGlyph } from "../components";
 import { Link, Loading, formatDate, formatDue, formatStamp, isDueSoon, navigate, run, todayLocal, useData } from "../lib";
 
 const U = M.ui;
@@ -49,7 +49,7 @@ function EventPicker(props: { quest: QuestDetail; today: string; onClose: () => 
   );
 }
 
-export function Quest(props: { id: string }) {
+export function Quest(props: { id: string; listHref: string }) {
   const state = useData<QuestDetail>(() => get(`/api/quests/${props.id}`), [props.id], 30000);
   const [pending, setPending] = useState<Pending>(null);
   const [showDone, setShowDone] = useState(false);
@@ -76,43 +76,25 @@ export function Quest(props: { id: string }) {
     [U.quest.resumeOn, q.resume_on ? formatDate(q.resume_on, today) : null],
   ];
 
+  const shownFacts = facts.filter(([, v]) => v);
+
   return (
-    <div class="page quest-page">
-      <button class="back" onClick={() => (history.length > 1 ? history.back() : navigate("/"))}>
-        ‹ {U.back}
-      </button>
+    <article class={`quest-detail kind-${q.kind}`}>
+      <Link href={props.listHref} class="back narrow-only">
+        ‹ {U.log.backToList}
+      </Link>
       <header class="quest-head">
-        <div class="badges">
-          <span class={`badge status-${q.status}`}>{q.awaiting_report ? U.tracker.awaiting : M.questStatus[q.status]}</span>
-          {q.kind !== "normal" && <span class={`badge kind-${q.kind}`}>{M.questKind[q.kind]}</span>}
+        <span class="quest-glyph" aria-hidden="true">
+          {questGlyph(q)}
+        </span>
+        <div class="quest-head-main">
+          <h1>{q.title}</h1>
+          <div class="badges">
+            <span class={`badge status-${q.status}`}>{q.awaiting_report ? U.tracker.awaiting : M.questStatus[q.status]}</span>
+            {q.kind !== "normal" && <span class={`badge kind-${q.kind}`}>{M.questKind[q.kind]}</span>}
+            {q.progress.total > 0 && <span class="meta">{U.quest.progress(q.progress.done, q.progress.total)}</span>}
+          </div>
         </div>
-        <h1>{q.title}</h1>
-        {q.completion_condition && (
-          <p class="condition">
-            <span class="label">{U.quest.completionCondition}</span>
-            {q.completion_condition}
-          </p>
-        )}
-        <dl class="facts">
-          {facts
-            .filter(([, v]) => v)
-            .map(([k, v]) => (
-              <div key={k} class={k === U.quest.due && q.status === "active" && isDueSoon(q.due, today) ? "soon" : ""}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-        </dl>
-        {q.prerequisites.length > 0 && (
-          <p class="meta">
-            {U.quest.prerequisites}：
-            {q.prerequisites.map((p) => (
-              <Link key={p.id} href={`/quest/${p.id}`} class="chip">
-                {p.title}（{M.questStatus[p.status]}）
-              </Link>
-            ))}
-          </p>
-        )}
       </header>
 
       {q.awaiting_report && (
@@ -122,6 +104,12 @@ export function Quest(props: { id: string }) {
             {U.quest.complete}
           </button>
         </div>
+      )}
+
+      {q.completion_condition && (
+        <Section title={U.quest.completionCondition} icon="❖">
+          <p class="condition">{q.completion_condition}</p>
+        </Section>
       )}
 
       {q.proposals.length > 0 && (
@@ -134,10 +122,10 @@ export function Quest(props: { id: string }) {
         </Section>
       )}
 
-      <Section title={U.quest.tasks} count={openTasks.length}>
+      <Section title={U.quest.objectives} count={openTasks.length} icon="!">
         <ul class="tasks">
-          {openTasks.map((t) => (
-            <TaskItem key={t.id} task={t} today={today} onChange={reload} readOnly={closed} />
+          {openTasks.map((t, i) => (
+            <TaskItem key={t.id} task={t} today={today} onChange={reload} readOnly={closed} current={i === 0 && !closed && !isDaily} />
           ))}
         </ul>
         {!closed && (
@@ -165,8 +153,32 @@ export function Quest(props: { id: string }) {
         )}
       </Section>
 
+      {(shownFacts.length > 0 || q.prerequisites.length > 0) && (
+        <Section title={U.quest.info} icon="i">
+          <dl class="facts">
+            {shownFacts.map(([k, v]) => (
+              <div key={k} class={k === U.quest.due && q.status === "active" && isDueSoon(q.due, today) ? "soon" : ""}>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </div>
+            ))}
+          </dl>
+          {q.prerequisites.length > 0 && (
+            <p class="meta">
+              {U.quest.prerequisites}：
+              {q.prerequisites.map((p) => (
+                <Link key={p.id} href={`/quest/${p.id}`} class="chip">
+                  {p.title}（{M.questStatus[p.status]}）
+                </Link>
+              ))}
+            </p>
+          )}
+        </Section>
+      )}
+
       {!isDaily && (
         <Section
+          icon="◷"
           title={U.quest.events}
           action={
             !closed && (
@@ -200,7 +212,7 @@ export function Quest(props: { id: string }) {
         </Section>
       )}
 
-      <Section title={U.quest.journal}>
+      <Section title={U.quest.journal} icon="✎">
         {q.journal.length === 0 && <p class="empty muted">{U.none}</p>}
         <ul class="journal">
           {q.journal.map((j) => (
@@ -222,7 +234,7 @@ export function Quest(props: { id: string }) {
       </Section>
 
       {!isDaily && (
-        <section class="part actions">
+        <footer class="quest-actions">
           {q.status === "active" && (
             <label class="check-label">
               <input
@@ -233,7 +245,7 @@ export function Quest(props: { id: string }) {
               {U.quest.tracked}
             </label>
           )}
-          <div class="row wrap">
+          <div class="row wrap action-bar">
             {q.status === "board" && <button class="primary" onClick={() => setStatus("active", U.quest.accept)}>{U.quest.accept}</button>}
             {q.status === "on_hold" && <button class="primary" onClick={() => setStatus("active", U.quest.resume)}>{U.quest.resume}</button>}
             {q.status === "active" && !q.awaiting_report && <button onClick={complete}>{U.quest.complete}</button>}
@@ -244,7 +256,7 @@ export function Quest(props: { id: string }) {
             {q.status === "discarded" && (
               <button
                 class="danger"
-                onClick={() => confirm(U.quest.purgeConfirm) && run(() => op("purge_quest", { quest_id: q.id }), () => navigate("/log"))}
+                onClick={() => confirm(U.quest.purgeConfirm) && run(() => op("purge_quest", { quest_id: q.id }), () => navigate(props.listHref))}
               >
                 {U.quest.purge}
               </button>
@@ -256,7 +268,7 @@ export function Quest(props: { id: string }) {
           <p class="meta">
             {U.quest.updated} {formatStamp(q.updated_at)}
           </p>
-        </section>
+        </footer>
       )}
 
       {(pending === "on_hold" || pending === "discarded" || pending === "board") && (
@@ -268,6 +280,6 @@ export function Quest(props: { id: string }) {
         />
       )}
       {pending === "events" && <EventPicker quest={q} today={today} onClose={() => setPending(null)} onChange={reload} />}
-    </div>
+    </article>
   );
 }
