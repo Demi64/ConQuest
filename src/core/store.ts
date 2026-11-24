@@ -38,7 +38,7 @@ const TABLES = {
   journal: ["quest_id", "body", "author", "created_at", "deleted_at"],
   tasks: [
     "quest_id", "title", "status", "requester", "location", "due", "required_env", "sort_order", "carryover_count",
-    "recurring_id", "generated_date", "done_at", "created_at", "deleted_at",
+    "recurring_id", "generated_date", "done_at", "scheduled_on", "note", "created_at", "deleted_at",
   ],
   recurring: [
     "title", "rule_type", "weekdays", "day_of_month", "interval_days", "requester", "location", "required_env",

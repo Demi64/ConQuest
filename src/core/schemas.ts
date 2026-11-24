@@ -18,6 +18,18 @@ const sourceInputs = z
   .optional()
   .describe("この操作の元になった未整理の入力のID。指定すると、操作が成功した時点でその入力は処理済みになる");
 
+/** 必要な環境の決まった言い方（絞り込みに使えるよう、なるべくこの中から選ぶ） */
+export const ENV_CHOICES = ["家", "外出", "PC", "スマホ", "電話", "現場", "職場"] as const;
+const ENV_DESCRIBE = `必要な環境。なるべく次から選ぶ（複数なら「・」でつなぐ）：${ENV_CHOICES.join("、")}。内容から推測して埋め、確信がなければ空`;
+
+const noteField = z
+  .string()
+  .trim()
+  .max(1000)
+  .nullable()
+  .optional()
+  .describe("補足（条件・注意・番号など）。タイトルは行動だけを短く書き、「〜なら不要」などの但し書きはここに書く");
+
 const eventIds = z.array(id).max(20).optional().describe("紐づける予定のID（get_overview や search で得たもの）");
 
 const taskDraft = z.object({
@@ -25,7 +37,12 @@ const taskDraft = z.object({
   requester: optField.describe("依頼主。空なら所属クエストの値を引き継ぐ"),
   location: optField.describe("場所。空なら所属クエストの値を引き継ぐ"),
   due: due.nullable().optional().describe("期限"),
-  required_env: optField.describe("必要な環境（例：PC、現場、電話できる場所）。内容から推測して埋める"),
+  required_env: optField.describe(ENV_DESCRIBE),
+  note: noteField,
+  scheduled_on: date
+    .nullable()
+    .optional()
+    .describe("やる日（今日以降）。クエストに属したまま、その日のデイリーに表示される。デイリーに追加するとき（daily_date）は不要"),
   event_ids: eventIds,
 });
 
@@ -123,7 +140,9 @@ export const schemas = {
     requester: optField,
     location: optField,
     due: due.nullable().optional(),
-    required_env: optField,
+    required_env: optField.describe(ENV_DESCRIBE),
+    note: noteField,
+    scheduled_on: date.nullable().optional().describe("やる日（今日以降）。null で外す。クエストからは外れない"),
     add_event_ids: eventIds,
     remove_event_ids: z.array(id).max(20).optional(),
     source_input_ids: sourceInputs,
@@ -136,7 +155,9 @@ export const schemas = {
   move_tasks: z.object({
     task_ids: z.array(id).min(1).max(50).describe("この順番で並ぶ"),
     to_quest_id: id.optional().describe("移動先のクエスト。省略すると今のクエスト内での並べ替え"),
-    to_daily_date: date.optional().describe("デイリーの日付への予約（今日以降）"),
+    to_daily_date: date
+      .optional()
+      .describe("その日にやる予定にする（今日以降）。クエストのタスクはクエストに属したまま「やる日」が付き、その日のデイリーに表示される。デイリーのタスクはその日のデイリーへ移る"),
     position,
     after_task_id: id.optional(),
     source_input_ids: sourceInputs,

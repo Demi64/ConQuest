@@ -125,7 +125,7 @@ export function Quest(props: { id: string; listHref: string }) {
       <Section title={U.quest.objectives} count={openTasks.length} icon="!">
         <ul class="tasks">
           {openTasks.map((t, i) => (
-            <TaskItem key={t.id} task={t} today={today} onChange={reload} readOnly={closed} current={i === 0 && !closed && !isDaily} />
+            <TaskItem key={t.id} task={t} today={today} onChange={reload} readOnly={closed} current={i === 0 && !closed && !isDaily} inQuest={!isDaily} />
           ))}
         </ul>
         {!closed && (
@@ -145,7 +145,7 @@ export function Quest(props: { id: string; listHref: string }) {
             {showDone && (
               <ul class="tasks">
                 {doneTasks.map((t) => (
-                  <TaskItem key={t.id} task={t} today={today} onChange={reload} readOnly={closed} />
+                  <TaskItem key={t.id} task={t} today={today} onChange={reload} readOnly={closed} inQuest={!isDaily} />
                 ))}
               </ul>
             )}

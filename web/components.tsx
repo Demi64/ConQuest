@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { M } from "../src/shared/messages";
 import type { EventView, ProposalView, QuestSummary, TaskView } from "../src/shared/types";
 import { op } from "./api";
-import { Link, formatDate, formatDue, isDueSoon, run } from "./lib";
+import { Link, addDays, formatDate, formatDue, isDueSoon, run } from "./lib";
 
 const U = M.ui;
 
@@ -165,40 +165,85 @@ export function TaskItem(props: {
   readOnly?: boolean;
   /** 現在の目的（未完了の先頭）として目立たせる */
   current?: boolean;
+  /** クエストの内容の中に出すとき（やる日を表示する） */
+  inQuest?: boolean;
 }) {
   const { task: t } = props;
   const [open, setOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
   const set = (status: TaskView["status"]) => run(() => op("set_task_status", { task_id: t.id, status }), props.onChange);
+  const schedule = (date: string) =>
+    run(() => op("move_tasks", { task_ids: [t.id], to_daily_date: date }), () => {
+      setPicking(false);
+      setOpen(false);
+      props.onChange();
+    });
+  const unschedule = () => run(() => op("update_task", { task_id: t.id, scheduled_on: null }), props.onChange);
+  const isOpen = t.status === "open";
+  const questTitle = props.questTitle ?? t.quest_title;
   const meta = [
-    t.due ? `${U.quest.due} ${formatDue(t.due, props.today)}` : null,
+    t.due ? `${t.overdue ? U.task.overdue : U.quest.due} ${formatDue(t.due, props.today)}` : null,
+    props.inQuest && t.scheduled_on && isOpen ? `${U.task.scheduledOn} ${formatDate(t.scheduled_on, props.today)}` : null,
     t.location,
     t.required_env,
     t.carryover_count > 0 ? U.daily.carried(t.carryover_count) : null,
   ].filter(Boolean);
+  const tomorrow = addDays(props.today, 1);
   return (
-    <li class={`task ${t.status} ${props.current ? "current" : ""}`}>
+    <li class={`task ${t.status} ${props.current ? "current" : ""} ${t.stuck ? "stuck" : ""} ${t.overdue ? "overdue" : ""}`}>
       <button
         class="check"
         role="checkbox"
         aria-checked={t.status === "done"}
         aria-label={t.title}
         disabled={props.readOnly || t.status === "dropped"}
-        onClick={() => set(t.status === "open" ? "done" : "open")}
+        onClick={() => set(isOpen ? "done" : "open")}
       >
         {t.status === "done" ? "✓" : t.status === "dropped" ? "–" : ""}
       </button>
       <div class="task-main" onClick={() => !props.readOnly && setOpen(!open)}>
         {props.current && <span class="current-label">{U.quest.currentObjective}</span>}
+        {t.stuck && <span class="stuck-label">{U.task.stuck}</span>}
         <span class="task-title">{t.title}</span>
-        {meta.length > 0 && (
-          <span class={`meta ${t.status === "open" && isDueSoon(t.due, props.today) ? "soon" : ""}`}>{meta.join("・")}</span>
+        {questTitle && (
+          <span class="task-quest" onClick={(e) => e.stopPropagation()}>
+            <Link href={`/quest/${t.quest_id}`}>◆ {questTitle}</Link>
+          </span>
         )}
-        {open && (
-          <span class="row task-actions">
-            {t.status === "open" ? (
-              <button class="small" onClick={() => set("dropped")}>
-                {U.quest.drop}
-              </button>
+        {t.note && <span class="task-note">{t.note}</span>}
+        {meta.length > 0 && (
+          <span class={`meta ${isOpen && (t.overdue || isDueSoon(t.due, props.today)) ? "soon" : ""}`}>{meta.join("・")}</span>
+        )}
+        {(open || (t.stuck && !props.readOnly)) && (
+          <span class="row task-actions" onClick={(e) => e.stopPropagation()}>
+            {isOpen ? (
+              <>
+                {picking ? (
+                  <input
+                    type="date"
+                    min={props.today}
+                    aria-label={U.task.pickDate}
+                    onChange={(e) => e.currentTarget.value && schedule(e.currentTarget.value)}
+                  />
+                ) : (
+                  <>
+                    <button class="small" onClick={() => schedule(tomorrow)}>
+                      {U.task.tomorrow}
+                    </button>
+                    <button class="small" onClick={() => setPicking(true)}>
+                      {U.task.pickDate}
+                    </button>
+                  </>
+                )}
+                {props.inQuest && t.scheduled_on && (
+                  <button class="small" onClick={unschedule}>
+                    {U.task.unschedule}
+                  </button>
+                )}
+                <button class="small" onClick={() => set("dropped")}>
+                  {U.quest.drop}
+                </button>
+              </>
             ) : (
               <button class="small" onClick={() => set("open")}>
                 {U.quest.reopenTask}

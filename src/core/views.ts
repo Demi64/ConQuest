@@ -74,8 +74,16 @@ export async function summarize(db: D1Database, quests: QuestRow[]): Promise<Que
   });
 }
 
+/** 期限を過ぎているか（日付だけの期限はその日いっぱいまで） */
+function isOverdue(due: string | null, today: string, nowLocal: string): boolean {
+  if (!due) return false;
+  return due.length === 10 ? due < today : due < nowLocal;
+}
+
 /** タスクを表示用にする。依頼主・場所・期限・必要な環境が空なら、所属クエストの値を引き継ぐ */
-async function taskViews(db: D1Database, tasks: TaskRow[], quests: Map<string, QuestRow>): Promise<TaskView[]> {
+async function taskViews(ctx: Ctx, tasks: TaskRow[], quests: Map<string, QuestRow>): Promise<TaskView[]> {
+  const { db, settings } = ctx;
+  const nowLocal = localDateTime(settings.timezone, new Date(ctx.now));
   const links = await selectIn<{ task_id: string; event_id: string }>(
     db,
     (m) => `SELECT task_id, event_id FROM event_links WHERE task_id IN (${m})`,
@@ -85,6 +93,8 @@ async function taskViews(db: D1Database, tasks: TaskRow[], quests: Map<string, Q
   for (const l of links) events.set(l.task_id, [...(events.get(l.task_id) ?? []), l.event_id]);
   return tasks.map((t) => {
     const q = quests.get(t.quest_id);
+    const due = t.due ?? q?.due ?? null;
+    const open = t.status === "open";
     return {
       id: t.id,
       quest_id: t.quest_id,
@@ -92,30 +102,57 @@ async function taskViews(db: D1Database, tasks: TaskRow[], quests: Map<string, Q
       status: t.status,
       requester: t.requester ?? q?.requester ?? null,
       location: t.location ?? q?.location ?? null,
-      due: t.due ?? q?.due ?? null,
+      due,
       required_env: t.required_env ?? q?.required_env ?? null,
       carryover_count: t.carryover_count,
       from_recurring: !!t.recurring_id,
       updated_at: t.updated_at,
       event_ids: events.get(t.id) ?? [],
+      scheduled_on: t.scheduled_on ?? null,
+      note: t.note ?? null,
+      overdue: open && isOverdue(due, ctx.today, nowLocal),
+      stuck: open && t.carryover_count >= settings.stalled_carryover_count,
     };
   });
 }
 
-async function questTasks(db: D1Database, quest: QuestRow): Promise<TaskView[]> {
-  const r = await db
+async function questTasks(ctx: Ctx, quest: QuestRow): Promise<TaskView[]> {
+  const r = await ctx.db
     .prepare("SELECT * FROM tasks WHERE quest_id = ? AND deleted_at IS NULL ORDER BY sort_order, created_at")
     .bind(quest.id)
     .all<TaskRow>();
-  return taskViews(db, r.results, new Map([[quest.id, quest]]));
+  return taskViews(ctx, r.results, new Map([[quest.id, quest]]));
 }
 
-async function dailyOf(ctx: Ctx): Promise<HomeView["daily"]> {
+/**
+ * その日のデイリー＝デイリーそのものに入っているタスク＋やる日がその日のクエストのタスク（受注中のクエストのものだけ）。
+ * 決めてもらう対象（繰り越しが続いている）と期限切れを先頭に、あとは未完了→済みの順。
+ */
+async function dailyOf(ctx: Ctx, date = ctx.today): Promise<HomeView["daily"]> {
   const quest = await ctx.db
     .prepare("SELECT * FROM quests WHERE kind = 'daily' AND daily_date = ? AND deleted_at IS NULL")
-    .bind(ctx.today)
+    .bind(date)
     .first<QuestRow>();
-  return { quest_id: quest?.id ?? null, date: ctx.today, tasks: quest ? await questTasks(ctx.db, quest) : [] };
+  const own = quest ? await questTasks(ctx, quest) : [];
+  const sched = await ctx.db
+    .prepare(
+      `SELECT t.* FROM tasks t JOIN quests q ON q.id = t.quest_id
+       WHERE t.scheduled_on = ? AND t.deleted_at IS NULL AND q.deleted_at IS NULL AND q.kind != 'daily' AND q.status = 'active'
+       ORDER BY t.updated_at`,
+    )
+    .bind(date)
+    .all<TaskRow>();
+  const parents = await selectIn<QuestRow>(ctx.db, (m) => `SELECT * FROM quests WHERE id IN (${m})`, [
+    ...new Set(sched.results.map((t) => t.quest_id)),
+  ]);
+  const pmap = new Map(parents.map((q) => [q.id, q]));
+  const scheduled = (await taskViews(ctx, sched.results, pmap)).map((t) => ({ ...t, quest_title: pmap.get(t.quest_id)?.title }));
+  const rank = (t: TaskView) => (t.status !== "open" ? 3 : t.stuck || t.overdue ? 0 : 1);
+  const tasks = [...own, ...scheduled]
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => rank(a.t) - rank(b.t) || a.i - b.i)
+    .map((x) => x.t);
+  return { quest_id: quest?.id ?? null, date, tasks };
 }
 
 // ---------- 予定 ----------
@@ -302,7 +339,7 @@ export async function questDetail(ctx: Ctx, questId: string): Promise<QuestDetai
   const { db } = ctx;
   const quest = await mustQuest(db, questId);
   const [summary] = await summarize(db, [quest]);
-  const tasks = await questTasks(db, quest);
+  const tasks = await questTasks(ctx, quest);
   const journal = await db
     .prepare("SELECT id, body, author, created_at FROM journal WHERE quest_id = ? AND deleted_at IS NULL ORDER BY created_at, rowid")
     .bind(quest.id)
@@ -368,7 +405,7 @@ export async function search(ctx: Ctx, a: Args<"search">): Promise<unknown> {
       ...new Set(rows.results.map((t) => t.quest_id)),
     ]);
     const qmap = new Map(quests.map((q) => [q.id, q]));
-    const views = await taskViews(db, rows.results, qmap);
+    const views = await taskViews(ctx, rows.results, qmap);
     return {
       total: total?.n ?? 0,
       tasks: views.map((t) => ({ ...t, quest_title: qmap.get(t.quest_id)?.title, quest_status: qmap.get(t.quest_id)?.status })),
@@ -392,7 +429,30 @@ export async function search(ctx: Ctx, a: Args<"search">): Promise<unknown> {
 
 // ---------- AI向け：全体の概要 ----------
 
-export async function overview(ctx: Ctx): Promise<unknown> {
+export interface CalendarState {
+  ready: boolean;
+  connected: boolean;
+  last_sync: string | null;
+  last_error: string | null;
+}
+
+/** 期限を過ぎた未完了のタスク（タスク自身の期限で判定。受注中・保留のクエストとデイリーのもの） */
+async function overdueTasks(ctx: Ctx): Promise<{ id: string; title: string; due: string; quest_id: string; quest_title: string; scheduled_on: string | null }[]> {
+  const nowLocal = localDateTime(ctx.settings.timezone, new Date(ctx.now));
+  const r = await ctx.db
+    .prepare(
+      `SELECT t.id, t.title, t.due, t.quest_id, q.title AS quest_title, t.scheduled_on
+       FROM tasks t JOIN quests q ON q.id = t.quest_id
+       WHERE t.status = 'open' AND t.deleted_at IS NULL AND q.deleted_at IS NULL AND q.status IN ('active', 'on_hold')
+         AND t.due IS NOT NULL AND ((length(t.due) = 10 AND t.due < ?1) OR (length(t.due) > 10 AND t.due < ?2))
+       ORDER BY t.due LIMIT 50`,
+    )
+    .bind(ctx.today, nowLocal)
+    .all<{ id: string; title: string; due: string; quest_id: string; quest_title: string; scheduled_on: string | null }>();
+  return r.results;
+}
+
+export async function overview(ctx: Ctx, calendar?: CalendarState): Promise<unknown> {
   const { db, settings } = ctx;
   const LIMIT = 100;
   const staleBefore = new Date(Date.parse(ctx.now) - settings.stale_days * 86400000).toISOString();
@@ -415,7 +475,7 @@ export async function overview(ctx: Ctx): Promise<unknown> {
 
   const staleQuests = activeList.filter((q) => !q.awaiting_report && q.updated_at < staleBefore);
   const staleHolds = holdList.filter((q) => !q.resume_on && q.updated_at < staleBefore);
-  const stuckTasks = daily.tasks.filter((t) => t.status === "open" && t.carryover_count >= settings.stalled_carryover_count);
+  const stuckTasks = daily.tasks.filter((t) => t.stuck);
   const oldBoard = await db
     .prepare("SELECT COUNT(*) AS n FROM quests WHERE status = 'board' AND deleted_at IS NULL AND updated_at < ?")
     .bind(staleBefore)
@@ -455,6 +515,17 @@ export async function overview(ctx: Ctx): Promise<unknown> {
       carried_over_task_ids: stuckTasks.map((t) => t.id),
       old_board_quests: oldBoard?.n ?? 0,
     },
+    overdue: {
+      tasks: await overdueTasks(ctx),
+      quest_ids: activeList.filter((q) => !q.awaiting_report && q.due && q.due.slice(0, 10) < ctx.today).map((q) => q.id),
+    },
+    calendar: calendar
+      ? {
+          connected: calendar.connected,
+          last_sync: calendar.last_sync ? localDateTime(settings.timezone, new Date(calendar.last_sync)) : null,
+          last_error: calendar.last_error,
+        }
+      : undefined,
     events_next_7_days: await eventsBetween(ctx, ctx.today, addDays(ctx.today, 7)),
     proposals: {
       pending: await pendingProposals(db),

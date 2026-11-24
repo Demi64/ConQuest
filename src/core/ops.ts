@@ -137,6 +137,13 @@ async function expireProposals(tx: Tx, where: { questId?: string; targetId?: str
 
 const emptyToNull = (v: string | null | undefined): string | null | undefined => (v === "" ? null : v);
 
+/** やる日の確認：今日以降の日付 */
+function assertSchedule(ctx: Ctx, d: string | null | undefined): void {
+  if (!d) return;
+  if (!isValidDate(d)) throw new OpError(M.error.badDate);
+  if (d < ctx.today) throw new OpError(M.error.pastDaily);
+}
+
 // ---------- 操作 ----------
 
 type Handler<K extends OpName> = (ctx: Ctx, args: Args<K>) => Promise<unknown>;
@@ -174,6 +181,7 @@ const createQuest: Handler<"create_quest"> = async (ctx, a) => {
   const taskIds: string[] = [];
   for (const [i, t] of (a.tasks ?? []).entries()) {
     assertDate(t.due);
+    assertSchedule(ctx, t.scheduled_on);
     const task = tx.insert("tasks", {
       quest_id: quest.id,
       title: t.title,
@@ -182,6 +190,8 @@ const createQuest: Handler<"create_quest"> = async (ctx, a) => {
       location: emptyToNull(t.location) ?? null,
       due: t.due ?? null,
       required_env: emptyToNull(t.required_env) ?? null,
+      note: emptyToNull(t.note) ?? null,
+      scheduled_on: t.scheduled_on ?? null,
       sort_order: i + 1,
       carryover_count: 0,
     });
@@ -346,6 +356,8 @@ const addTasks: Handler<"add_tasks"> = async (ctx, a) => {
   const taskIds: string[] = [];
   for (const [i, t] of a.tasks.entries()) {
     assertDate(t.due);
+    // デイリーそのものに入れるタスクは、デイリーの日付がやる日なので scheduled_on は持たない
+    if (quest.kind !== "daily") assertSchedule(ctx, t.scheduled_on);
     const task = tx.insert("tasks", {
       quest_id: quest.id,
       title: t.title,
@@ -354,6 +366,8 @@ const addTasks: Handler<"add_tasks"> = async (ctx, a) => {
       location: emptyToNull(t.location) ?? null,
       due: t.due ?? null,
       required_env: emptyToNull(t.required_env) ?? null,
+      note: emptyToNull(t.note) ?? null,
+      scheduled_on: quest.kind === "daily" ? null : (t.scheduled_on ?? null),
       sort_order: orders[i],
       carryover_count: 0,
     });
@@ -369,6 +383,11 @@ const addTasks: Handler<"add_tasks"> = async (ctx, a) => {
 const updateTask: Handler<"update_task"> = async (ctx, a) => {
   const task = await mustTask(ctx.db, a.task_id);
   assertDate(a.due);
+  assertSchedule(ctx, a.scheduled_on);
+  if (a.scheduled_on) {
+    const quest = await mustQuest(ctx.db, task.quest_id);
+    if (quest.kind === "daily") throw new OpError(M.error.scheduleOnDaily);
+  }
   const tx = new Tx(ctx);
   tx.update("tasks", task, {
     title: a.title,
@@ -376,6 +395,10 @@ const updateTask: Handler<"update_task"> = async (ctx, a) => {
     location: emptyToNull(a.location),
     due: a.due,
     required_env: emptyToNull(a.required_env),
+    note: emptyToNull(a.note),
+    scheduled_on: a.scheduled_on,
+    // やる日を決め直したら、繰り越しの数え直し
+    carryover_count: a.scheduled_on && a.scheduled_on !== task.scheduled_on ? 0 : undefined,
   });
   await linkEvents(tx, a.add_event_ids, { taskId: task.id });
   await unlinkEvents(tx, a.remove_event_ids, { taskId: task.id });
@@ -404,9 +427,36 @@ const moveTasks: Handler<"move_tasks"> = async (ctx, a) => {
   const tasks: TaskRow[] = [];
   for (const id of new Set(a.task_ids)) tasks.push(await mustTask(ctx.db, id));
   const tx = new Tx(ctx);
+
+  // 日付への予約：クエストのタスクはクエストに属したまま「やる日」を付ける。デイリーのタスクだけ、その日のデイリーへ移す
+  let scheduled = 0;
+  if (a.to_daily_date && !a.to_quest_id) {
+    assertSchedule(ctx, a.to_daily_date);
+    const containers = new Map<string, QuestRow>();
+    for (const t of tasks) {
+      if (!containers.has(t.quest_id)) containers.set(t.quest_id, await mustQuest(ctx.db, t.quest_id));
+    }
+    const inQuests = tasks.filter((t) => containers.get(t.quest_id)!.kind !== "daily");
+    for (const t of inQuests) {
+      assertOpen(containers.get(t.quest_id)!);
+      tx.update("tasks", t, { scheduled_on: a.to_daily_date, carryover_count: 0 });
+      tx.touchQuest(t.quest_id);
+      scheduled++;
+    }
+    const inDaily = tasks.filter((t) => containers.get(t.quest_id)!.kind === "daily");
+    if (inDaily.length === 0) {
+      await markInputs(tx, a.source_input_ids);
+      await tx.commit("move_tasks", M.summary.scheduleTasks(scheduled, a.to_daily_date), {
+        questId: inQuests.length === 1 ? inQuests[0].quest_id : null,
+      });
+      return { scheduled_on: a.to_daily_date, task_ids: tasks.map((t) => t.id) };
+    }
+    tasks.splice(0, tasks.length, ...inDaily);
+  }
+
   let dest: QuestRow;
   if (a.to_quest_id || a.to_daily_date) {
-    dest = await resolveDestination(tx, a.to_quest_id, a.to_daily_date);
+    dest = await resolveDestination(tx, a.to_quest_id, a.to_quest_id ? undefined : a.to_daily_date);
   } else {
     if (new Set(tasks.map((t) => t.quest_id)).size !== 1) throw new OpError(M.error.needTarget);
     dest = await mustQuest(ctx.db, tasks[0].quest_id);
@@ -416,9 +466,21 @@ const moveTasks: Handler<"move_tasks"> = async (ctx, a) => {
   const others = (await tasksOf(ctx.db, dest.id)).filter((t) => !moving.has(t.id));
   const orders = sortOrders(others, tasks.length, a.position, a.after_task_id);
   for (const [i, t] of tasks.entries()) {
+    let scheduledOn: string | null | undefined;
+    if (dest.kind === "daily") scheduledOn = null;
+    else if (t.quest_id !== dest.id) {
+      // デイリーからクエストへ移すときは、そのデイリーの日（今日以降）をやる日として引き継ぐ。
+      // to_daily_date も指定されていれば、そちらをやる日にする
+      const from = await mustQuest(ctx.db, t.quest_id);
+      if (a.to_quest_id && a.to_daily_date) {
+        assertSchedule(ctx, a.to_daily_date);
+        scheduledOn = a.to_daily_date;
+      } else if (from.kind === "daily" && from.daily_date && from.daily_date >= ctx.today) scheduledOn = from.daily_date;
+    }
     tx.update("tasks", t, {
       quest_id: dest.id,
       sort_order: orders[i],
+      scheduled_on: scheduledOn,
       // 日付を指定して予約し直したものは、繰り越しの数え直し
       carryover_count: a.to_daily_date ? 0 : undefined,
     });
@@ -426,8 +488,12 @@ const moveTasks: Handler<"move_tasks"> = async (ctx, a) => {
   }
   await markInputs(tx, a.source_input_ids);
   tx.touchQuest(dest.id);
-  await tx.commit("move_tasks", M.summary.moveTasks(tasks.length, dest.title), { questId: dest.id });
-  return { quest_id: dest.id, task_ids: tasks.map((t) => t.id) };
+  const summary =
+    scheduled > 0
+      ? `${M.summary.scheduleTasks(scheduled, a.to_daily_date!)}、${M.summary.moveTasks(tasks.length, dest.title)}`
+      : M.summary.moveTasks(tasks.length, dest.title);
+  await tx.commit("move_tasks", summary, { questId: dest.id });
+  return { quest_id: dest.id, task_ids: a.task_ids };
 };
 
 const setRecurring: Handler<"set_recurring"> = async (ctx, a) => {

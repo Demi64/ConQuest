@@ -113,8 +113,26 @@ export async function ensureDay(base: Ctx): Promise<void> {
     carried.forEach((t, i) => {
       tx.update("tasks", t, { quest_id: today.id, sort_order: start + i, carryover_count: t.carryover_count + 1 });
     });
+    // クエストのタスクで、やる日が過ぎて未完了のもの：受注中のクエストなら今日へ繰り越し、
+    // 受注中でない（保留・Quest Board など）なら、やる日を外す（再開したときに古い日付が残らないように）
+    const late = await ctx.db
+      .prepare(
+        `SELECT t.*, q.status AS quest_status FROM tasks t JOIN quests q ON q.id = t.quest_id
+         WHERE t.scheduled_on < ? AND t.status = 'open' AND t.deleted_at IS NULL AND q.kind != 'daily'`,
+      )
+      .bind(ctx.today)
+      .all<TaskRow & { quest_status: string }>();
+    let carriedScheduled = 0;
+    for (const { quest_status, ...t } of late.results) {
+      if (quest_status === "active") {
+        tx.update("tasks", t as TaskRow, { scheduled_on: ctx.today, carryover_count: t.carryover_count + 1 });
+        carriedScheduled++;
+      } else {
+        tx.update("tasks", t as TaskRow, { scheduled_on: null });
+      }
+    }
     const generated = await generateInto(tx, today, carried);
-    await tx.commit("daily_rollover", M.summary.dailyRollover(ctx.today, carried.length, generated), {
+    await tx.commit("daily_rollover", M.summary.dailyRollover(ctx.today, carried.length + carriedScheduled, generated), {
       questId: today.id,
       undoable: false,
     });
