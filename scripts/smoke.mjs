@@ -220,12 +220,41 @@ async function main() {
 
   if (BASE.includes("localhost")) {
     console.log("== 日付の切り替え（ローカルのみ：データベースの日付を1日ずらして確かめる）");
+    // やる日：クエストのタスクはクエストに属したまま、その日のデイリーに出る
+    const sq = await call("create_quest", {
+      title: "車検を通す",
+      completion_condition: "車検が終わっている",
+      tasks: [{ title: "予約する", note: "平日のみ受付", due: "2020-01-01" }, { title: "書類をそろえる" }],
+    });
+    const [reserve, papers] = sq.task_ids;
+    await call("move_tasks", { task_ids: [reserve], to_daily_date: home.today });
+    const errand = await call("add_tasks", { daily_date: home.today, tasks: [{ title: "車検の見積を聞く" }] });
+    await call("move_tasks", { task_ids: [errand.task_ids[0]], to_quest_id: sq.quest_id });
+    home = (await web("/api/home")).body;
+    const sched = home.daily.tasks.find((t) => t.id === reserve);
+    check(
+      "やる日を付けてもクエストに属したまま、デイリーに出る",
+      sched?.quest_id === sq.quest_id && sched.quest_title === "車検を通す" && sched.scheduled_on === home.today,
+      sched,
+    );
+    check("補足と期限切れが表示に乗る", sched?.note === "平日のみ受付" && sched.overdue === true, sched);
+    check("期限切れはデイリーの先頭", home.daily.tasks[0]?.id === reserve, home.daily.tasks.map((t) => t.title));
+    const moved = home.daily.tasks.find((t) => t.id === errand.task_ids[0]);
+    check("デイリーからクエストへ戻すと、やる日を引き継ぐ", moved?.quest_id === sq.quest_id && moved.scheduled_on === home.today, moved);
+    const sqDetail = await call("get_quest", { quest_id: sq.quest_id });
+    check("クエストの進み具合に数えられる", sqDetail.progress?.total === 3, sqDetail.progress);
+    const ovw = await call("get_overview");
+    check("概要に期限切れとカレンダーの状態", ovw.overdue?.tasks?.some((t) => t.id === reserve) && ovw.calendar?.connected === false, [ovw.overdue, ovw.calendar]);
+    const past = await call("update_task", { task_id: papers, scheduled_on: "2020-01-01" });
+    check("過去の日はやる日にできない", !!past.error, past);
+
     const again = await call("set_recurring", { title: "皿洗い", rule_type: "daily" });
     const t2 = await call("add_tasks", { daily_date: home.today, tasks: [{ title: "郵便を出す" }] });
     const yesterday = new Date(Date.parse(`${home.today}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
     const sql = [
       `UPDATE quests SET daily_date = '${yesterday}' WHERE kind = 'daily' AND daily_date = '${home.today}'`,
       `UPDATE tasks SET generated_date = '${yesterday}' WHERE generated_date = '${home.today}'`,
+      `UPDATE tasks SET scheduled_on = '${yesterday}' WHERE scheduled_on = '${home.today}'`,
       `UPDATE settings SET value = '${yesterday}' WHERE key = 'last_rollover_date'`,
     ].join("; ");
     execSync(`npx wrangler d1 execute DB --local --command "${sql}"`, { stdio: "ignore" });
@@ -234,6 +263,12 @@ async function main() {
     check("未完了が翌日に繰り越され、回数が数えられる", carried?.carryover_count === 1, home.daily.tasks);
     const dishes = home.daily.tasks.filter((t) => t.title === "皿洗い");
     check("繰り越した繰り返しタスクは重ねて出さない", dishes.length === 1 && dishes[0].carryover_count === 1, dishes);
+    const rolled = home.daily.tasks.find((t) => t.id === reserve);
+    check(
+      "やる日が過ぎたクエストのタスクは今日へ繰り越し、クエストに残る",
+      rolled?.scheduled_on === home.today && rolled.carryover_count === 1 && rolled.quest_id === sq.quest_id,
+      rolled,
+    );
     await call("set_recurring", { recurring_id: again.recurring_id, active: false });
   }
 

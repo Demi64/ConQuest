@@ -4,6 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { env as globalEnv } from "cloudflare:workers";
+import { calendarStatus } from "../calendar/google";
 import { makeCtx, resolveRun } from "../core/context";
 import { ensureDay } from "../core/daily";
 import { acknowledgeInputs, runOp } from "../core/ops";
@@ -18,7 +19,7 @@ type McpOp = (typeof MCP_OPS)[number];
 
 const DESCRIPTIONS: Record<McpOp, string> = {
   get_overview:
-    "全体の概要を読む。未整理の入力、今日のデイリー、受注中・保留のクエスト（現在の目的・期限・最終更新つき）、報告待ち、止まっているもの、今日と近日の予定、承認待ち・最近却下された提案、繰り返しの定義。最初に必ず読む",
+    "全体の概要を読む。未整理の入力、今日のデイリー（やる日が今日のクエストのタスクを含む）、受注中・保留のクエスト（現在の目的・期限・最終更新つき）、報告待ち、止まっているもの、期限切れ、今日と近日の予定とカレンダーの接続状態、承認待ち・最近却下された提案、繰り返しの定義。最初に必ず読む",
   get_quest: "1つのクエストの全情報（タスク、ジャーナル、前提クエスト、紐づく予定、そのクエストへの提案）を読む",
   search: "クエスト・タスク・予定を条件で探す（状態、種類、期限、依頼主、必要な環境、最終更新、繰り越し回数、キーワード）",
   create_quest:
@@ -26,15 +27,17 @@ const DESCRIPTIONS: Record<McpOp, string> = {
   update_quest: "クエストの完了条件・期限・場所・依頼主・必要な環境・紐づく予定・前提クエスト・トラッカー表示を変える。タイトルは変えられない",
   set_quest_status: "クエストを受注／保留／破棄／Quest Boardへ戻す。理由が必須。完了にはできない（完了は利用者だけが行う）",
   append_journal: "クエストのジャーナル（経緯の記録）に追記する。後から読んで再開できるよう、決まったこと・分かったことを書く",
-  add_tasks: "タスクをまとめて追加する。追加先はクエスト（quest_id）か、デイリーの日付（daily_date）",
-  update_task: "タスクのタイトル・依頼主・場所・期限・必要な環境・紐づく予定を変える",
+  add_tasks:
+    "タスクをまとめて追加する。追加先はクエスト（quest_id）か、デイリーの日付（daily_date）。クエストのタスクは scheduled_on で、その日のデイリーにも表示できる",
+  update_task: "タスクのタイトル・補足（note）・依頼主・場所・期限・必要な環境・やる日・紐づく予定を変える",
   set_task_status: "タスクを完了／やめた／未完了に戻す。完了は利用者が終わったと報告したときだけ",
-  move_tasks: "タスクの並べ替え、別クエストへの移動、デイリーの日付への予約",
+  move_tasks:
+    "タスクの並べ替え、別クエストへの移動、日付への予約（クエストのタスクはクエストに属したまま、やる日が付く）",
   set_recurring: "繰り返しの定義（デイリーに毎回出すタスクのひな形）を作成・変更・停止する",
   get_history: "変更履歴を読む（クエスト単位・AIの実行単位・期間で絞り込み）",
   undo: "変更1件、またはAIの1回の実行をまとめて取り消す",
   propose:
-    "フォローアップの提案を出す（やる／やらない／止まっている）。利用者が画面で承認するとシステムが action を実行する。クエストの完了は提案できない。同じ提案が承認待ち・最近却下済みならエラーになる",
+    "フォローアップの提案を出す（やる／やらない／止まっている）。承認制の設定のときだけ使う（即時反映の設定では直接書き込む）。利用者が画面で承認するとシステムが action を実行する。クエストの完了は提案できない。同じ提案が承認待ち・最近却下済みならエラーになる",
   withdraw_proposal: "状況が変わって不要になった承認待ちの提案を取り下げる",
 };
 
@@ -49,7 +52,7 @@ async function execute(env: Env, name: McpOp, args: unknown): Promise<unknown> {
     case "get_overview": {
       const a = parsed as { acknowledge_input_ids?: string[] };
       if (a.acknowledge_input_ids?.length) await acknowledgeInputs(ctx, a.acknowledge_input_ids);
-      return overview(ctx);
+      return overview(ctx, await calendarStatus(env));
     }
     case "get_quest":
       return questDetail(ctx, (parsed as { quest_id: string }).quest_id);

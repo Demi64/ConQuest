@@ -161,6 +161,13 @@ export function formatDue(due: string, today?: string): string {
   return due.length > 10 ? `${formatDate(due.slice(0, 10), today)} ${due.slice(11)}` : formatDate(due, today);
 }
 
+/** YYYY-MM-DD に日数を足す */
+export function addDays(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 /** 記録の日時（ISO）を端末の時刻で「11/10 21:05」 */
 export function formatStamp(iso: string): string {
   const d = new Date(iso);

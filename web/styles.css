@@ -480,6 +480,46 @@ label > textarea {
 
 .task-actions {
   margin-top: 6px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-actions input[type="date"] {
+  width: auto;
+}
+
+.task-quest {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.task-quest a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.task-note {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  opacity: 0.8;
+  white-space: pre-wrap;
+}
+
+.task.stuck,
+.task.overdue {
+  background: var(--report-soft);
+  border-radius: 6px;
+  border-bottom-color: transparent;
+  margin: 0 -8px 2px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.stuck-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--report);
 }
 
 /* ---------- クエスト ---------- */

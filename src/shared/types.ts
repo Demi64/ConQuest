@@ -41,6 +41,9 @@ export interface TaskRow {
   recurring_id: string | null;
   generated_date: string | null;
   done_at: string | null;
+  /** クエストに属したまま、この日のデイリーに出す（YYYY-MM-DD） */
+  scheduled_on: string | null;
+  note: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -128,6 +131,15 @@ export interface TaskView {
   from_recurring: boolean;
   updated_at: string;
   event_ids: string[];
+  /** やる日（クエストのタスクをデイリーに出す日）。デイリーそのものに入っているタスクは null */
+  scheduled_on: string | null;
+  note: string | null;
+  /** 期限を過ぎて未完了 */
+  overdue: boolean;
+  /** 繰り越しが設定の回数に達した（決めてもらう対象） */
+  stuck: boolean;
+  /** デイリーに出ているクエストのタスクの、所属クエスト名 */
+  quest_title?: string;
 }
 
 export interface QuestSummary {
